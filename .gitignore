@@ -36,8 +36,11 @@ node_modules/
 *.old
 
 # Ignore output directory contents
-output/
+/output/
 
 # Ignore configuration and state files which are user-specific
 state.json
 config.json
+
+# Ignore backup files
+backups/
