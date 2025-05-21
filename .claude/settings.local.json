@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "mcp__code-understanding__clone_repo",
+      "mcp__code-understanding__get_repo_structure",
+      "mcp__code-understanding__get_repo_documentation",
+      "mcp__code-understanding__get_repo_file_content",
+      "mcp__code-understanding__refresh_repo",
+      "mcp__code-understanding__get_repo_critical_files",
+      "mcp__mermaid_image_generator__generate_mermaid_diagram_file",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob"
+    ],
+    "deny": []
+  }
+}

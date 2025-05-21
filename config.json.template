@@ -1,0 +1,19 @@
+{
+  "repos": [
+    {
+      "name": "organization/repository-name",
+      "github_url": "https://github.com/organization/repository-name"
+    },
+    {
+      "name": "another-org/another-repo",
+      "github_url": "https://github.com/another-org/another-repo"
+    }
+  ],
+  "preferred_diagrams": ["component", "sequence", "class"],
+  "doc_format": "markdown",
+  "analysis_options": {
+    "critical_files_limit": 50,
+    "include_metrics": true,
+    "max_tokens": 5000
+  }
+}

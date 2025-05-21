@@ -1,0 +1,43 @@
+# Ignore cloned repositories
+/repos/
+
+# Ignore specific logs and temp files
+claude_error.log
+*.log
+*.tmp
+.DS_Store
+
+# Environment and IDE files
+.env
+.vscode/
+.idea/
+*.iml
+.mcp.json
+
+# Ignore MCP analysis cache
+.mcp-cache/
+
+# Python virtual environment
+venv/
+env/
+.python-version
+
+# Node modules
+node_modules/
+
+# Editor backup files
+*~
+*.swp
+*.swo
+
+# Copied versions of files
+*.good
+*.bak
+*.old
+
+# Ignore output directory contents
+output/
+
+# Ignore configuration and state files which are user-specific
+state.json
+config.json
