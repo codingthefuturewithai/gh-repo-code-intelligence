@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "code-understanding": {
+      "command": "uvx",
+      "args": [
+        "code-understanding-mcp-server",
+        "--cache-dir", "<your_root_dir>/custom-cache-dir",     // Override repository cache location
+        "--max-cached-repos", "20"  // Override maximum number of cached repos. Defaults to 10. 
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "your-token-here" // Only required if you need to access private GitHub repositories for analysis.
+      }
+    },
+    "mermaid_image_generator": {
+      "command": "uvx",
+      "args": [
+        "mcp_mermaid_image_gen"
+      ]
+    }
+  }
+}
