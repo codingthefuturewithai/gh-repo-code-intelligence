@@ -41,6 +41,7 @@ node_modules/
 # Ignore configuration and state files which are user-specific
 state.json
 config.json
+.claude/settings.local.json
 
 # Ignore backup files
 backups/
