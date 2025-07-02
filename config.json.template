@@ -15,5 +15,11 @@
     "critical_files_limit": 50,
     "include_metrics": true,
     "max_tokens": 5000
+  },
+  "confluence": {
+    "enabled": false,
+    "site_alias": "your-site-alias",
+    "space_key": "YOUR_SPACE",
+    "parent_page_title": "Parent Page Title"
   }
 }

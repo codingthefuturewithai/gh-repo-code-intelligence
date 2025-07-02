@@ -16,6 +16,15 @@
       "args": [
         "mcp_mermaid_image_gen"
       ]
+    },
+    "Conduit": {
+      "command": "npx",
+      "args": [
+        "conduit-mcp"
+      ],
+      "env": {
+        "CONDUIT_CONFIG_DIR": "/path/to/your/conduit/config"  // Required: directory containing config.yaml with Atlassian authentication
+      }
     }
   }
 }
