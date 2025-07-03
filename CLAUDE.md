@@ -7,12 +7,27 @@ This file provides guidance to Claude Code when analyzing GitHub repositories. Y
 When instructed to analyze repositories:
 
 1. Read the `config.json` and `state.json` files (creating state.json if it doesn't exist)
-2. For each repository in the config:
+2. Determine the optimal processing strategy based on repository count:
+   - **1-2 repositories**: Process sequentially with `/compact` between each
+   - **3+ repositories**: Use parallel processing with Task agents
+3. For parallel processing:
+   - Spawn multiple Task agents to process repositories concurrently
+   - Each agent handles one repository independently
+   - Coordinate state updates through state.json
+4. For each repository (whether sequential or parallel):
    - Analyze its current state
    - Perform repository analysis using MCP code-understanding tools
    - Generate local documentation with diagrams using MCP mermaid tools
    - Update the state.json file with new information
    - Upload the generated documentation to Confluence (if confluence upload is enabled)
+
+## Permission Configuration
+
+To avoid permission prompts that block automated execution:
+- Configure your settings.local.json with broad permissions OR
+- Run Claude Code with permission bypass flags
+- Task agents inherit permissions from the parent instance
+- Ensure all Bash commands, file operations, and MCP tools are pre-approved
 
 ## File Structure
 
@@ -47,8 +62,7 @@ You MUST adhere to these tool selection guidelines:
 
 4. **Confluence Operations**:
    - Use MCP Conduit tools for uploading documentation to Confluence
-   - Use the 'pbs' site alias for the PBS Atlassian instance
-   - Upload to the CFDP Confluence space under the parent page "CFDP Polaris/SDVI Repo Docs"
+   - Use the site alias, space key, and parent page title from config.json
 
 ## URL Format Requirements
 
@@ -97,14 +111,15 @@ For each repository in config.json, accomplish these goals:
    - **IMPORTANT**: Always use relative paths for image references in the markdown documentation
      - Example: Use `![Component Diagram](diagrams/component_diagram.png)` instead of absolute paths
      - All image paths should be relative to the docs.md file location
+   - **VERIFY**: After generating docs.md, read it back to confirm all image references are present
 
 5. **State Management**
    - Update the repository's state in state.json after each operation
    - Record success/failure status and timestamps for each completed operation
 
 6. **Confluence Upload**
-   - After generating documentation locally, upload it to Confluence
-   - First, find the parent page "CFDP Polaris/SDVI Repo Docs" in the CFDP space
+   - After generating documentation locally, upload it to Confluence if enabled
+   - First, find the parent page specified in config.json
    - For each repository, create or update a child page under the parent
    - Page title should be the repository name (e.g., "org/repo-name")
    - Convert the markdown documentation to Confluence format
@@ -170,13 +185,14 @@ The `config.json` file follows this structure:
   "analysis_options": {
     "critical_files_limit": 50,
     "include_metrics": true,
-    "max_tokens": 5000
+    "max_tokens": 5000,
+    "timeout_minutes": 10
   },
   "confluence": {
     "enabled": true,
-    "site_alias": "pbs",
-    "space_key": "CFDP",
-    "parent_page_title": "CFDP Polaris/SDVI Repo Docs"
+    "site_alias": "your-site-alias",
+    "space_key": "YOUR_SPACE",
+    "parent_page_title": "Your Parent Page Title"
   }
 }
 ```
@@ -236,6 +252,111 @@ The `state.json` file tracks each repository's status. If this file doesn't exis
 
 During processing, record any NEW errors in the "errors" array, and update other fields as appropriate.
 
+## Parallel Execution Strategy
+
+When processing 3 or more repositories, use parallel Task agents to maximize efficiency and prevent context accumulation:
+
+### Phase 1: Setup and Planning
+1. Read config.json to get all repositories
+2. Verify MCP tool availability with a test call
+3. Read or create state.json
+4. Calculate optimal batch size (maximum 2 repositories per batch to prevent hanging)
+5. Create the execution plan
+
+### Phase 2: Parallel Repository Processing
+1. **Spawn Task agents in batches** using concurrent tool invocations:
+   ```
+   - Agent 1: Process repo A
+   - Agent 2: Process repo B  
+   (maximum 2 agents at once to prevent hanging)
+   ```
+   
+   **Example Task Agent Prompt**:
+   ```
+   You are Task Agent 1. Process the repository "org/repo-name" according to CLAUDE.md.
+   
+   Your specific assignment:
+   - Repository: org/repo-name
+   - GitHub URL: https://github.com/org/repo-name
+   - Output directory: output/org_repo-name/YYYY-MM-DD-HHMMSS/
+   - Config: {preferred_diagrams, analysis_options, confluence settings}
+   
+   Follow the complete workflow in CLAUDE.md:
+   1. Check/update state.json (mark as processing)
+   2. Clone or refresh the repository
+   3. Analyze and generate documentation
+   4. Create diagrams as configured
+   5. Upload to Confluence if enabled
+   6. Update state.json (mark as complete)
+   7. Run /compact before finishing
+   8. Report your results
+   
+   IMPORTANT: Run with --dangerously-skip-permissions to avoid permission prompts
+   ```
+
+2. **Each Task agent independently**:
+   - Receives its assigned repository name and config
+   - **PERMISSIONS**: Agent runs with full permissions to avoid blocking on tool approvals
+   - Performs the complete analysis workflow:
+     - Convert SSH URLs to HTTPS if needed
+     - Check MCP cache with get_repo_structure
+     - Clone or refresh repository as appropriate
+     - Analyze structure and critical files
+     - Generate diagrams with MCP mermaid tools
+     - Create comprehensive documentation
+     - **For Confluence upload**:
+       - Read the generated docs.md file
+       - List all diagram files in the diagrams/ directory
+       - Replace markdown image syntax with Confluence syntax before upload
+       - Ensure all images are properly embedded, not just attached
+   - Updates state.json with thread-safe writes:
+     - Read current state
+     - Update only its repository's section
+     - Write back with timestamp to track last updater
+   - Runs `/compact` before completing to clear its context
+
+3. **State Coordination Protocol**:
+   - Each agent must follow this update pattern:
+     ```json
+     {
+       "repo-name": {
+         "processing_started": "timestamp",
+         "processing_agent": "agent_id",
+         "cloned": true,
+         "last_updated": "timestamp",
+         // ... other fields
+       }
+     }
+     ```
+   - Agents check for "processing_started" to avoid conflicts
+   - If a repo is already being processed, skip to next available
+
+### Phase 3: Monitoring and Completion
+1. After spawning each batch, wait for completion before spawning next batch
+2. Monitor state.json to ensure both agents finish
+3. Only after both complete, spawn next batch of 2
+4. Continue until all repositories are processed
+5. Generate final summary report
+
+**IMPORTANT**: Never spawn new agents until previous batch completes to prevent resource exhaustion
+
+**TROUBLESHOOTING HUNG AGENTS**:
+- If an agent shows "processing_started" but no progress after 10 minutes
+- Check if "cloned": false - likely stuck on repository access
+- Common causes: network issues, large repo size, permission denials
+- Consider reducing batch size to 1 agent at a time for problematic repos
+
+## Sequential Execution (1-2 repositories)
+
+For small repository sets, use sequential processing with context management:
+
+1. Process each repository one at a time
+2. After completing each repository (all analysis, docs, uploads):
+   - Update state.json
+   - Execute `/compact` to clear context
+   - Continue to next repository
+3. This prevents context accumulation without the complexity of parallel coordination
+
 ## Execution
 
 When asked to "Analyze repositories according to CLAUDE.md", you should:
@@ -244,32 +365,19 @@ When asked to "Analyze repositories according to CLAUDE.md", you should:
    - Test that MCP code-understanding tools are accessible by making a test call
    - If tools are available, proceed regardless of any errors in state.json
    - If tools are truly unavailable, stop and report the issue clearly
-2. Read config.json
+2. Read config.json and count repositories
 3. Check if state.json exists:
    - If it exists, read it BUT DO NOT let old errors stop you from trying
    - If it doesn't exist, create it by initializing an empty state for each repository in config.json
    - If it contains errors about "MCP tools not available", ignore them and test current availability
-4. Create the current timestamp for output directories (YYYY-MM-DD-HHMMSS format)
-5. For each repository:
-   - Convert any SSH URLs to HTTPS format
-   - First verify if the repository exists in the MCP cache by attempting get_repo_structure
-   - If get_repo_structure fails with a "not in cache" error, clone the repository regardless of state.json status
-   - If get_repo_structure succeeds but state.json shows it needs updating, refresh the repository
-   - If repository access fails, record the error and move to the next repository
-   - Create a timestamped directory under output/{repo_name}/
-   - Use MCP mermaid_image_generator to create diagrams in the diagrams/ subdirectory
-   - Create a comprehensive docs.md file with embedded references to the diagrams using relative paths
-   - Update state.json with your progress
-   - If confluence upload is enabled in config.json:
-     - Find the parent page using get_confluence_page with space_key and parent_page_title
-     - Check if a child page for this repository already exists
-     - Prepare attachments array by scanning the diagrams/ directory for generated images
-     - Convert markdown image references to Confluence format (!filename!)
-     - Create or update the Confluence page with:
-       - The converted documentation content
-       - All diagram images as attachments
-     - Record the confluence upload status and page ID in state.json
-6. Provide a summary of actions taken and results
+4. **Choose execution strategy**:
+   - **1-2 repos**: Use sequential processing with `/compact` between each
+   - **3+ repos**: Use parallel Task agents as described above
+5. Create the current timestamp for output directories (YYYY-MM-DD-HHMMSS format)
+6. Execute chosen strategy:
+   - **Sequential**: Process each repo fully, then `/compact`, then next
+   - **Parallel**: Spawn Task agents in batches, monitor progress
+7. Provide a summary of actions taken and results
 
 ## URL Format Conversion
 
@@ -307,17 +415,22 @@ When uploading documentation to Confluence (if enabled in config.json):
 
 2. **Finding the Parent Page**:
    - Use `mcp__Conduit__get_confluence_page` with:
-     - `site_alias`: The configured site (default: "pbs")
-     - `space_key`: The configured space (default: "CFDP")
-     - `title`: The configured parent page title (default: "CFDP Polaris/SDVI Repo Docs")
+     - `site_alias`: From config.json confluence.site_alias
+     - `space_key`: From config.json confluence.space_key
+     - `title`: From config.json confluence.parent_page_title
    - If the parent page doesn't exist, report the error and skip Confluence upload
 
 3. **Creating/Updating Child Pages**:
    - For each repository, create a child page under the parent
    - Page title should match the repository name (e.g., "org/repo-name")
    - Check if a page with this title already exists under the parent:
-     - If it exists: Use `mcp__Conduit__update_confluence_page`
-     - If it doesn't exist: Use `mcp__Conduit__create_confluence_page_from_markdown`
+     - If it exists: 
+       - Use `mcp__Conduit__update_confluence_page`
+       - Retrieve the current page version number (required for updates)
+       - Include ALL images in attachments array even if they were previously uploaded
+       - The Conduit tool will handle replacing existing attachments
+     - If it doesn't exist: 
+       - Use `mcp__Conduit__create_confluence_page_from_markdown`
 
 4. **Content Preparation**:
    - The Conduit tool automatically converts markdown to Confluence format
@@ -333,31 +446,44 @@ When uploading documentation to Confluence (if enabled in config.json):
          "name_on_confluence": "component_diagram.png"
        }
        ```
-   - Update markdown content to reference attached images using Confluence syntax:
-     - Replace relative paths like `![Diagram](diagrams/image.png)`
-     - With Confluence attachment syntax: `!image.png!`
+   - **CRITICAL**: You MUST prepare the content with embedded images BEFORE calling the upload tool:
+     - Read your generated docs.md file
+     - Create a NEW content string where you replace ALL markdown image syntax
+     - Find all image references: `![Component Diagram](diagrams/component_diagram.png)`
+     - Replace with Confluence storage format as specified in the MCP tool documentation 
+     - Place the image references EXACTLY where you want the images to appear
+     - The filename MUST match the `name_on_confluence` exactly
+     - The Conduit tool documentation shows the exact XML format to use for embedding images
+     - DO NOT just append image references at the end - they must be embedded in context
 
 5. **Uploading with Attachments**:
    - When creating a new page:
      ```
      mcp__Conduit__create_confluence_page_from_markdown
-     - space: "CFDP"
+     - space: (from config.json confluence.space_key)
      - title: "org/repo-name"
-     - content: (markdown with Confluence image syntax)
+     - content: (markdown with Confluence storage format for images)
      - parent_id: (from parent page lookup)
      - attachments: [array of AttachmentSpec objects]
-     - site_alias: "pbs"
+     - site_alias: (from config.json confluence.site_alias)
      ```
    - When updating an existing page:
      ```
-     mcp__Conduit__update_confluence_page
-     - space_key: "CFDP"
+     # First get the page to retrieve version
+     mcp__Conduit__get_confluence_page
+     - space_key: (from config.json confluence.space_key)
      - title: "org/repo-name"
-     - content: (markdown with Confluence image syntax)
-     - expected_version: (current version number)
-     - attachments: [array of AttachmentSpec objects]
+     - site_alias: (from config.json confluence.site_alias)
+     
+     # Then update with version number
+     mcp__Conduit__update_confluence_page
+     - space_key: (from config.json confluence.space_key)
+     - title: "org/repo-name"
+     - content: (markdown with Confluence storage format for images)
+     - expected_version: (version from get_confluence_page)
+     - attachments: [array of ALL image AttachmentSpec objects]
      - minor_edit: false (for significant updates)
-     - site_alias: "pbs"
+     - site_alias: (from config.json confluence.site_alias)
      ```
 
 6. **Image Reference Format**:
@@ -374,3 +500,67 @@ When uploading documentation to Confluence (if enabled in config.json):
    - Update `confluence_uploaded` timestamp upon successful upload
    - Store the `confluence_page_id` for future reference
    - Clear any previous confluence-related errors on success
+
+## Handling Re-Analysis of Existing Repositories
+
+When re-analyzing a repository that has already been processed:
+
+1. **Repository Updates**:
+   - Always use `refresh_repo` instead of `clone_repo` for existing repositories
+   - Generate new timestamps for output directories to preserve history
+
+2. **Documentation Updates**:
+   - Create new docs.md with embedded image references
+   - Ensure ALL image references use markdown syntax: `![Name](diagrams/file.png)`
+
+3. **Confluence Page Updates**:
+   - Check if confluence_page_id exists in state.json
+   - If yes, retrieve the existing page to get version number
+   - Replace ALL content and attachments (don't append)
+   - Convert ALL markdown image syntax to Confluence syntax before upload
+   - Include ALL images in attachments array, even if previously uploaded
+
+4. **Image Embedding Verification**:
+   - After generating docs.md, read it to confirm image references exist
+   - When preparing for Confluence, ensure EVERY `![...]` becomes `!filename!`
+   - The Confluence page should show embedded images, not just attachments
+
+## Task Agent Instructions
+
+When you are spawned as a Task agent to process a specific repository:
+
+1. **Identify Yourself**: You are an independent agent processing one repository
+2. **Read Your Assignment**: Your prompt will specify which repository to process
+3. **Follow the Complete Workflow**:
+   - Read the current state.json to check repository status
+   - Perform all analysis steps for your assigned repository
+   - Generate all required outputs (docs, diagrams)
+   - Upload to Confluence if configured
+   - Update state.json for your repository only
+4. **State Update Protocol**:
+   ```json
+   // Before starting work, mark as processing:
+   {
+     "your-repo": {
+       "processing_started": "2025-01-15-103045",
+       "processing_agent": "task_agent_1"
+     }
+   }
+   // After completion, update all fields and clear processing:
+   {
+     "your-repo": {
+       "processing_started": null,
+       "processing_agent": null,
+       "cloned": true,
+       "last_updated": "2025-01-15-104530",
+       "last_analysis": "2025-01-15-104530",
+       "docs_generated": "2025-01-15-104530",
+       "diagrams_generated": true,
+       "confluence_uploaded": "2025-01-15-104600",
+       "errors": []
+     }
+   }
+   ```
+5. **Context Management**: Run `/compact` before reporting completion
+6. **Error Handling**: If you encounter errors, record them but continue with what you can
+7. **Report Back**: Provide a concise summary of what you accomplished

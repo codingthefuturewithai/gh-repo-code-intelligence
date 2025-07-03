@@ -92,7 +92,33 @@ cd /path/to/gh-repo-code-intelligence
 claude -p "Analyze repositories according to CLAUDE.md"
 ```
 
-This will:
+### Recommended Execution Methods
+
+For automated or scheduled runs, use one of these approaches to avoid terminal hanging issues:
+
+1. **Simple output redirection** (recommended for automation):
+   ```bash
+   claude -p "Analyze repositories according to CLAUDE.md" --verbose --output-format stream-json > output.json
+   ```
+
+2. **Unbuffered output with real-time viewing**:
+   ```bash
+   claude -p "Analyze repositories according to CLAUDE.md" --verbose --output-format stream-json | stdbuf -o0 tee output.json
+   ```
+
+3. **Non-interactive mode for scripts**:
+   ```bash
+   claude -p "Analyze repositories according to CLAUDE.md" --verbose --output-format stream-json --no-interactive > output.json 2>&1
+   ```
+
+4. **Skip permission prompts** (use with caution):
+   ```bash
+   claude -p "Analyze repositories according to CLAUDE.md" --dangerously-skip-permissions
+   ```
+
+**Note**: When using `tee` without unbuffering, the terminal may appear to hang even after completion. This is just buffering behavior - the analysis is complete. Press Ctrl+C to exit.
+
+### What the Tool Does
 
 1. Read repositories from your `config.json`
 2. Create or update `state.json` to track progress

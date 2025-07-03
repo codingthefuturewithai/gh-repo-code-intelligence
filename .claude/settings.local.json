@@ -2,20 +2,46 @@
   "permissions": {
     "allow": [
       "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(git add:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git commit:*)",
+      "Bash(cd:*)",
+      "Bash(ln:*)",
+      "Bash(date:*)",
+      "Read",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "Glob",
+      "Grep",
       "mcp__code-understanding__clone_repo",
       "mcp__code-understanding__get_repo_structure",
       "mcp__code-understanding__get_repo_documentation",
       "mcp__code-understanding__get_repo_file_content",
       "mcp__code-understanding__refresh_repo",
       "mcp__code-understanding__get_repo_critical_files",
+      "mcp__code-understanding__get_source_repo_map",
       "mcp__mermaid_image_generator__generate_mermaid_diagram_file",
-      "Bash(ls:*)",
-      "Bash(find:*)",
-      "Read",
-      "Write",
-      "Edit",
-      "Glob"
+      "mcp__Conduit__list_atlassian_sites",
+      "mcp__Conduit__get_confluence_page",
+      "mcp__Conduit__create_confluence_page_from_markdown",
+      "mcp__Conduit__update_confluence_page",
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(cat:*)",
+      "Bash(cp:*)",
+      "Bash(grep:*)",
+      "Bash(echo:*)",
+      "Bash(pwd:*)"
     ],
     "deny": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "code-understanding",
+    "mermaid_image_generator",
+    "Conduit"
+  ]
 }
