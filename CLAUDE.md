@@ -73,6 +73,50 @@ You MUST adhere to these tool selection guidelines:
   - From: `git@github.com:organization/repo-name.git`
   - To: `https://github.com/organization/repo-name.git`
 
+## Analysis Profiles
+
+The tool supports different analysis profiles to create targeted documentation for specific audiences. Each profile generates a complete, self-contained document optimized for its intended readers.
+
+### Available Profiles
+
+1. **standard** (default)
+   - General-purpose technical documentation
+   - Balanced coverage of architecture, code, and functionality
+   - Suitable for mixed technical audiences
+   - Output: ~15-20 pages
+
+2. **developer_onboarding**
+   - Focused on helping new developers understand and work with the codebase
+   - Emphasizes: technology stack, development setup, code organization, design patterns
+   - Includes: how to navigate code, key workflows, integration points
+   - Output: ~25-30 pages
+
+3. **architecture_review**
+   - Designed for architects and technical leads
+   - Emphasizes: system design, architectural decisions, patterns, scalability
+   - Includes: service boundaries, technology rationale, extensibility points
+   - Output: ~25-30 pages
+
+4. **business_understanding**
+   - Targeted at product managers and business stakeholders
+   - Emphasizes: business capabilities, domain concepts, workflows
+   - Includes: user journeys, business rules, less technical detail
+   - Output: ~20-25 pages
+
+5. **operations_handover**
+   - Created for DevOps and operations teams
+   - Emphasizes: deployment, configuration, monitoring, dependencies
+   - Includes: infrastructure needs, operational workflows, integration points
+   - Output: ~20-25 pages
+
+### Profile-Based Documentation
+
+When an analysis profile is specified:
+- The agent adjusts its analysis focus based on the profile
+- Documentation tone and content are tailored to the target audience
+- Specific diagrams are generated to support the profile's goals
+- Each profile creates a complete story within ~30 pages (excluding images)
+
 ## Analysis Goals
 
 For each repository in config.json, accomplish these goals:
@@ -186,13 +230,15 @@ The `config.json` file follows this structure:
     "critical_files_limit": 50,
     "include_metrics": true,
     "max_tokens": 5000,
-    "timeout_minutes": 10
+    "timeout_minutes": 10,
+    "analysis_profile": "standard"  // Options: "standard", "developer_onboarding", "architecture_review", "business_understanding", "operations_handover"
   },
   "confluence": {
     "enabled": true,
     "site_alias": "your-site-alias",
     "space_key": "YOUR_SPACE",
-    "parent_page_title": "Your Parent Page Title"
+    "parent_page_title": "Your Parent Page Title",
+    "page_suffix": ""  // Optional: e.g., " - Developer Guide" for specific analysis profiles
   }
 }
 ```
@@ -211,7 +257,15 @@ The `state.json` file tracks each repository's status. If this file doesn't exis
     "diagrams_generated": false,
     "confluence_uploaded": null,
     "confluence_page_id": null,
-    "errors": []
+    "errors": [],
+    "profiles_analyzed": {
+      "standard": {
+        "timestamp": null,
+        "confluence_page_id": null,
+        "confluence_page_title": null,
+        "docs_generated": null
+      }
+    }
   }
 }
 ```
@@ -307,8 +361,8 @@ When processing 3 or more repositories, use parallel Task agents to maximize eff
      - **For Confluence upload**:
        - Read the generated docs.md file
        - List all diagram files in the diagrams/ directory
-       - Replace markdown image syntax with Confluence syntax before upload
-       - Ensure all images are properly embedded, not just attached
+       - Keep markdown image references as-is (the tool handles conversion)
+       - Ensure image filenames in markdown match the attachment names
    - Updates state.json with thread-safe writes:
      - Read current state
      - Update only its repository's section
@@ -422,7 +476,14 @@ When uploading documentation to Confluence (if enabled in config.json):
 
 3. **Creating/Updating Child Pages**:
    - For each repository, create a child page under the parent
-   - Page title should match the repository name (e.g., "org/repo-name")
+   - **Page Title Formula**: `{repository_name}{page_suffix}`
+     - `repository_name`: Exactly as specified in config.json repos[].name
+     - `page_suffix`: From confluence.page_suffix (empty for standard profile)
+     - Examples:
+       - Standard: "org/repo-name"
+       - Developer: "org/repo-name - Developer Guide"
+       - Architecture: "org/repo-name - Architecture Review"
+   - **CRITICAL**: Use this exact formula every time to ensure consistent page naming across runs
    - Check if a page with this title already exists under the parent:
      - If it exists: 
        - Use `mcp__Conduit__update_confluence_page`
@@ -446,15 +507,11 @@ When uploading documentation to Confluence (if enabled in config.json):
          "name_on_confluence": "component_diagram.png"
        }
        ```
-   - **CRITICAL**: You MUST prepare the content with embedded images BEFORE calling the upload tool:
-     - Read your generated docs.md file
-     - Create a NEW content string where you replace ALL markdown image syntax
-     - Find all image references: `![Component Diagram](diagrams/component_diagram.png)`
-     - Replace with Confluence storage format as specified in the MCP tool documentation 
-     - Place the image references EXACTLY where you want the images to appear
-     - The filename MUST match the `name_on_confluence` exactly
-     - The Conduit tool documentation shows the exact XML format to use for embedding images
-     - DO NOT just append image references at the end - they must be embedded in context
+   - **Image Handling**: 
+     - Keep all image references in standard markdown format: `![alt text](filename.png)`
+     - The Conduit tool automatically converts markdown to Confluence format
+     - The filename in the markdown (e.g., `component_diagram.png`) must match the `name_on_confluence` in the attachments array
+     - DO NOT manually convert to Confluence format - the tool handles this automatically
 
 5. **Uploading with Attachments**:
    - When creating a new page:
@@ -462,7 +519,7 @@ When uploading documentation to Confluence (if enabled in config.json):
      mcp__Conduit__create_confluence_page_from_markdown
      - space: (from config.json confluence.space_key)
      - title: "org/repo-name"
-     - content: (markdown with Confluence storage format for images)
+     - content: (standard markdown content with image references)
      - parent_id: (from parent page lookup)
      - attachments: [array of AttachmentSpec objects]
      - site_alias: (from config.json confluence.site_alias)
@@ -479,7 +536,7 @@ When uploading documentation to Confluence (if enabled in config.json):
      mcp__Conduit__update_confluence_page
      - space_key: (from config.json confluence.space_key)
      - title: "org/repo-name"
-     - content: (markdown with Confluence storage format for images)
+     - content: (standard markdown content with image references)
      - expected_version: (version from get_confluence_page)
      - attachments: [array of ALL image AttachmentSpec objects]
      - minor_edit: false (for significant updates)
@@ -487,9 +544,9 @@ When uploading documentation to Confluence (if enabled in config.json):
      ```
 
 6. **Image Reference Format**:
-   - In local markdown: `![Component Diagram](diagrams/component_diagram.png)`
-   - In Confluence content: `!component_diagram.png!`
-   - The tool will handle the conversion when preparing content for upload
+   - Use standard markdown format: `![Component Diagram](component_diagram.png)`
+   - The tool automatically handles conversion to Confluence format
+   - Ensure the filename matches exactly with `name_on_confluence` in attachments
 
 7. **Error Handling**:
    - If Confluence upload fails, record the error in state.json
@@ -497,8 +554,18 @@ When uploading documentation to Confluence (if enabled in config.json):
    - Do not retry failed uploads in the same session unless explicitly requested
 
 6. **State Tracking**:
-   - Update `confluence_uploaded` timestamp upon successful upload
-   - Store the `confluence_page_id` for future reference
+   - Update state.json with profile-specific information:
+     ```json
+     "profiles_analyzed": {
+       "[profile_name]": {
+         "timestamp": "YYYY-MM-DD-HHMMSS",
+         "confluence_page_id": "12345",
+         "confluence_page_title": "org/repo-name - Profile Suffix",
+         "docs_generated": "YYYY-MM-DD-HHMMSS"
+       }
+     }
+     ```
+   - Store the exact page title used for future reference
    - Clear any previous confluence-related errors on success
 
 ## Handling Re-Analysis of Existing Repositories
@@ -517,12 +584,12 @@ When re-analyzing a repository that has already been processed:
    - Check if confluence_page_id exists in state.json
    - If yes, retrieve the existing page to get version number
    - Replace ALL content and attachments (don't append)
-   - Convert ALL markdown image syntax to Confluence syntax before upload
+   - Keep markdown image syntax as-is (the tool converts automatically)
    - Include ALL images in attachments array, even if previously uploaded
 
 4. **Image Embedding Verification**:
    - After generating docs.md, read it to confirm image references exist
-   - When preparing for Confluence, ensure EVERY `![...]` becomes `!filename!`
+   - Ensure markdown image filenames match the attachment `name_on_confluence`
    - The Confluence page should show embedded images, not just attachments
 
 ## Task Agent Instructions
@@ -533,10 +600,11 @@ When you are spawned as a Task agent to process a specific repository:
 2. **Read Your Assignment**: Your prompt will specify which repository to process
 3. **Follow the Complete Workflow**:
    - Read the current state.json to check repository status
-   - Perform all analysis steps for your assigned repository
-   - Generate all required outputs (docs, diagrams)
-   - Upload to Confluence if configured
-   - Update state.json for your repository only
+   - Check the configured analysis_profile in config.json
+   - Perform all analysis steps for your assigned repository with profile-specific focus
+   - Generate all required outputs (docs, diagrams) tailored to the profile
+   - Upload to Confluence using the profile-specific page title formula
+   - Update state.json for your repository only, including profile-specific data
 4. **State Update Protocol**:
    ```json
    // Before starting work, mark as processing:
@@ -557,7 +625,15 @@ When you are spawned as a Task agent to process a specific repository:
        "docs_generated": "2025-01-15-104530",
        "diagrams_generated": true,
        "confluence_uploaded": "2025-01-15-104600",
-       "errors": []
+       "errors": [],
+       "profiles_analyzed": {
+         "[current_profile]": {
+           "timestamp": "2025-01-15-104530",
+           "confluence_page_id": "12345",
+           "confluence_page_title": "your-repo - Profile Suffix",
+           "docs_generated": "2025-01-15-104530"
+         }
+       }
      }
    }
    ```
