@@ -272,6 +272,7 @@ The `state.json` file tracks each repository's status. If this file doesn't exis
     "errors": [],
     "processing_started": null,
     "processing_agent": null,
+    "success": false,  // Boolean flag: true if all operations succeeded, false if any failed
     "profiles_analyzed": {
       "standard": {
         "timestamp": null,
@@ -295,12 +296,26 @@ The `state.json` file tracks each repository's status. If this file doesn't exis
 2. **Error Array Management**
    - Errors should be structured objects with timestamps
    - Clear the errors array when operations succeed
-   - Example error format:
+   - Example error formats:
    ```json
+   // Timeout error example
    {
-     "timestamp": "2025-06-20-143022",
+     "timestamp": "2025-07-04-143022",
+     "operation": "sub_agent_timeout",
+     "message": "Sub-agent timed out after 10 minutes (600000ms) - repository analysis incomplete"
+   }
+   
+   // Other error examples
+   {
+     "timestamp": "2025-07-04-143022",
      "operation": "clone",
-     "message": "Repository not found"
+     "message": "Repository not found or access denied"
+   }
+   
+   {
+     "timestamp": "2025-07-04-143022",
+     "operation": "confluence_upload",
+     "message": "Failed to upload to Confluence: Parent page not found"
    }
    ```
 
@@ -334,11 +349,20 @@ ALWAYS use Claude sub-agents to process repositories, even for a single reposito
 ### Phase 2: Spawning Claude Sub-Agents
 1. **REQUIREMENT: When processing 2 or more repositories, you MUST spawn exactly 2 sub-agents to run in parallel**. The `&` symbol at the end of each command runs it in the background for parallel execution. Use the `wait` command to ensure both complete before spawning the next batch.
 
+   **CRITICAL TIMEOUT HANDLING**:
+   - **ALWAYS launch sub-agents with 5-minute (300000ms) timeout initially**
+   - **If a sub-agent times out, retry ONCE with 10-minute (600000ms) timeout**
+   - **After second timeout, mark as failed in state.json with clear error message**
+   - **Use Bash tool timeout parameter for proper timeout control**
+
    ```bash
-   # ALWAYS spawn TWO sub-agents concurrently when you have multiple repositories
+   # ALWAYS spawn TWO sub-agents concurrently with 5-minute timeout
    claude -p "You are Claude Sub-Agent 1. Process repo A..." --dangerously-skip-permissions &
    claude -p "You are Claude Sub-Agent 2. Process repo B..." --dangerously-skip-permissions &
    wait  # Wait for both to complete before spawning next batch
+   
+   # If either times out, check exit codes and retry with 10-minute timeout:
+   # claude -p "You are Claude Sub-Agent 1. Process repo A..." --dangerously-skip-permissions &
    ```
    
    **Example Claude Sub-Agent Command**:
@@ -416,18 +440,40 @@ ALWAYS use Claude sub-agents to process repositories, even for a single reposito
 
 ### Phase 3: Monitoring and Completion
 1. After spawning each batch, wait for completion before spawning next batch
-2. Monitor state.json to ensure both agents finish
-3. Only after both complete, spawn next batch of 2
-4. Continue until all repositories are processed
-5. Generate final summary report
+2. Monitor exit codes from sub-agent commands:
+   ```bash
+   # Spawn sub-agents and capture their PIDs
+   claude -p "..." --dangerously-skip-permissions & PID1=$!
+   claude -p "..." --dangerously-skip-permissions & PID2=$!
+   
+   # Wait and check exit codes
+   wait $PID1; EXIT1=$?
+   wait $PID2; EXIT2=$?
+   
+   # If either timed out (exit code 124 or similar), retry with longer timeout
+   if [ $EXIT1 -ne 0 ] || [ $EXIT2 -ne 0 ]; then
+     # Retry failed repositories with 10-minute timeout
+   fi
+   ```
+3. Monitor state.json to track agent progress and success/failure status
+4. Only after both complete (or fail after retry), spawn next batch of 2
+5. Continue until all repositories are processed
+6. Generate final summary report showing:
+   - Successfully processed repositories (success: true)
+   - Failed repositories with error details (success: false)
+   - Total processing time and retry attempts
 
 **IMPORTANT**: Never spawn new agents until previous batch completes to prevent resource exhaustion
 
-**TROUBLESHOOTING HUNG AGENTS**:
-- If an agent shows "processing_started" but no progress after 10 minutes
-- Check if "cloned": false - likely stuck on repository access
-- Common causes: network issues, large repo size, permission denials
-- Consider reducing batch size to 1 agent at a time for problematic repos
+**TIMEOUT HANDLING PROTOCOL**:
+- Initial attempts: 5-minute timeout (300000ms)
+- Retry attempts: 10-minute timeout (600000ms)
+- After second timeout: Mark as failed with clear error message
+- Common timeout causes:
+  - Large repository size
+  - Network latency
+  - Complex analysis requirements
+  - MCP tool processing delays
 
 ## Execution
 
@@ -584,7 +630,7 @@ When you are spawned as a Claude sub-agent (via `claude -p` command) to process 
        "processing_agent": "claude_sub_agent_1"
      }
    }
-   // After completion, update all fields and clear processing:
+   // After SUCCESSFUL completion, update all fields and clear processing:
    {
      "your-repo": {
        "processing_started": null,
@@ -596,6 +642,7 @@ When you are spawned as a Claude sub-agent (via `claude -p` command) to process 
        "diagrams_generated": true,
        "confluence_uploaded": "2025-01-15-104600",
        "errors": [],
+       "success": true,  // Set to true when ALL operations succeed
        "profiles_analyzed": {
          "[current_profile]": {
            "timestamp": "2025-01-15-104530",
@@ -604,6 +651,22 @@ When you are spawned as a Claude sub-agent (via `claude -p` command) to process 
            "docs_generated": "2025-01-15-104530"
          }
        }
+     }
+   }
+   // If ANY operation fails, set success to false and populate errors:
+   {
+     "your-repo": {
+       "processing_started": null,
+       "processing_agent": null,
+       "success": false,  // Set to false if any operation failed
+       "errors": [
+         {
+           "timestamp": "2025-01-15-104530",
+           "operation": "clone",
+           "message": "Timeout after 10 minutes - repository too large or network issues"
+         }
+       ]
+       // ... other fields remain as they were
      }
    }
    ```
