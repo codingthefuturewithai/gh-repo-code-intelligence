@@ -1,25 +1,26 @@
-# AI Assistant Setup Prompt
+# Setup Assistant Instructions
 
-Copy and paste the following prompt to your AI coding assistant (Claude Code, Cursor, etc.) to get guided setup help.
-
-## What to Expect
-
-When you use this prompt, your AI assistant will:
-- ✅ Check all your prerequisites automatically
-- ✅ Execute commands for you where possible  
-- ✅ Guide you through manual steps with clear instructions
-- ✅ Help troubleshoot any errors that occur
-- ✅ Verify everything is working before declaring success
-
-The entire setup typically takes 5-10 minutes with AI assistance vs 30-45 minutes manually.
+This file contains instructions for AI coding assistants to help users set up this tool.
 
 ---
 
-## Setup Assistant Prompt
+## To the AI Assistant
 
-I need help setting up the GitHub Repository Analysis Tool from https://github.com/codingthefuturewithai/gh-repo-code-intelligence. Please read the README.md file in this repository and guide me through the complete setup process.
+You are helping set up the GitHub Repository Analysis Tool. First, review these key documentation resources to understand the tools involved:
 
-Here's what I need you to do:
+1. **Claude Code Documentation**: Review https://docs.anthropic.com/en/docs/claude-code/settings to understand:
+   - How Claude Code permissions work
+   - MCP (Model Context Protocol) tool configuration
+   - Configuration file locations and formats
+
+2. **Conduit Documentation**: Review https://github.com/codingthefuturewithai/conduit to understand:
+   - Installation process
+   - Configuration file structure
+   - How to set up Atlassian authentication
+
+3. **This Repository**: Read the README.md file in this repository for specific setup steps
+
+## Setup Tasks to Perform
 
 1. **Review Prerequisites**: Check if I have all required tools installed:
    - Python 3.10+ (check with `python --version` or `python3 --version`)
@@ -38,19 +39,32 @@ Here's what I need you to do:
 
 4. **Setup MCP Tools** (this is the most complex part):
    - Guide me through adding the three required MCP tools
-   - For the Code Understanding tool:
-     - Check if I need a GitHub Personal Access Token (for private repos)
-     - Help me create one if needed at https://github.com/settings/tokens
-     - Add the tool with the correct token
-   - For the Mermaid Image Generator:
-     - Add it using the simple command
-   - For Conduit (the tricky one):
-     - First check if I have pipx installed
-     - Install Conduit: `pipx install conduit-connect`
-     - Run initialization: `conduit --init`
-     - Guide me to edit the config.yaml file (you can't edit it directly, but show me exactly what to add)
-     - Help me get an Atlassian API token if I want Confluence integration
-     - Add the MCP server after it's configured
+   
+   **For Mermaid Image Generator**:
+   - Execute: `claude mcp add-json -s user mermaid_image_generator '{"type":"stdio","command":"uvx","args":["mcp_mermaid_image_gen"]}'`
+   
+   **For Code Understanding tool**:
+   - First ask: "Will you be analyzing any private GitHub repositories?"
+   - If NO: Execute the command without a GitHub token
+   - If YES: 
+     - **SECURITY BOUNDARY - STOP HERE**
+     - Instruct user: "You need to create a GitHub Personal Access Token"
+     - Direct them to: https://github.com/settings/tokens
+     - Show them the exact scopes needed (repo access)
+     - Prepare the command but with placeholder: `YOUR_GITHUB_TOKEN`
+     - Instruct user to execute the command manually after replacing the token
+   
+   **For Conduit**:
+   - Check if pipx is installed
+   - Install Conduit: `pipx install conduit-connect`
+   - Run initialization: `conduit --init`
+   - Show the user the exact config.yaml structure they need
+   - If they want Confluence integration:
+     - **SECURITY BOUNDARY - STOP HERE**
+     - Direct them to create Atlassian API token at: https://id.atlassian.com/manage-profile/security/api-tokens
+     - Show config.yaml structure with placeholder for api_token
+     - Have them manually edit the file to add their credentials
+   - After user confirms configuration is complete, add the MCP server
 
 5. **Configure config.json**:
    - Copy the template to create config.json
@@ -59,26 +73,34 @@ Here's what I need you to do:
    - If I want Confluence integration, help me configure those settings
 
 6. **Verify Setup**:
-   - Run some test commands to ensure everything is working
-   - Check that all MCP tools are properly registered
-   - Provide troubleshooting if anything fails
+   - **MCP Tool Verification Note**: Newly installed MCP tools typically require restarting your IDE/editor
+   - Determine the appropriate restart procedure for your environment:
+     - For VS Code with Continue/Codeium: May need to restart VS Code
+     - For Claude Code: May need to restart the application
+     - For Cursor: May need to restart Cursor
+   - Provide the user with verification commands to run AFTER restart:
+     ```bash
+     # These commands should be run by the user after restarting:
+     claude mcp list  # Should show all three MCP tools
+     ```
+   - If verification fails, provide troubleshooting steps
 
 7. **First Run**:
-   - Show me how to run the tool for the first time
+   - Show the user how to run: `claude -p "Analyze repositories according to CLAUDE.md" --dangerously-skip-permissions`
    - Explain what to expect during analysis
-   - Help interpret any error messages
+   - Provide guidance on common issues and their solutions
 
-Please execute commands where you can, and for steps you cannot execute (like editing config files I need to manually change), provide clear, specific instructions with examples.
+## Important Security Notes
 
-Start by checking my current environment and installed tools, then guide me step by step. If you encounter any errors, help me troubleshoot them before moving to the next step.
+- **NEVER** handle or store API keys, tokens, or passwords
+- **ALWAYS** stop at security boundaries and instruct the user to handle sensitive data manually
+- **CLEARLY** mark where automated assistance ends and manual steps begin
 
----
+## Execution Guidelines
 
-## Additional Context for Complex Setups
+1. Execute commands where safe and appropriate
+2. For configuration files that need sensitive data, show the structure but have user edit manually
+3. Be explicit about what you're doing vs what the user needs to do
+4. If unsure about your IDE's MCP tool detection, explain the options to the user
 
-If you're helping me with Confluence integration, here's additional context:
-- I'll need an Atlassian account with access to a Confluence space
-- The Conduit config.yaml needs my Atlassian credentials
-- The site_alias in config.json must match what I configure in Conduit
-
-Please be patient and thorough - I want to make sure everything is set up correctly the first time!
+Start by checking the current environment and installed tools, then proceed step by step.
