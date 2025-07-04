@@ -10,6 +10,8 @@ Simply tell your AI assistant: *"Please read and execute the setup instructions 
 
 The AI assistant will guide you through the entire setup process in about 5-10 minutes.
 
+**After setup**, use [USAGE_ASSISTANT_PROMPT.md](USAGE_ASSISTANT_PROMPT.md) to have your AI assistant help you configure and use the tool effectively.
+
 ## Features
 
 - **Repository Analysis**: Clone and analyze GitHub repositories
@@ -178,6 +180,21 @@ To create both developer and architecture documentation for the same repository:
 This will create two separate Confluence pages (if enabled) with different documentation perspectives for the same repository.
 
 ## Usage
+
+### AI-Assisted Usage (Recommended)
+
+For help with configuration, running analyses, choosing profiles, and troubleshooting:
+
+> Tell your AI assistant: *"Please read [USAGE_ASSISTANT_PROMPT.md](USAGE_ASSISTANT_PROMPT.md) and help me use this tool"*
+
+Your AI assistant can help you:
+- Configure repositories and analysis options
+- Choose the right analysis profile for your needs
+- Run the tool with appropriate output options
+- Troubleshoot any issues
+- Understand the generated documentation
+
+### Manual Usage
 
 Run the tool using Claude Code:
 
