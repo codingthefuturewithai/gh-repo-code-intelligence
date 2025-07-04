@@ -390,4 +390,4 @@ We're actively working on enhancing this tool with more features:
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
