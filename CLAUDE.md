@@ -2,31 +2,39 @@
 
 This file provides guidance to Claude Code when analyzing GitHub repositories. You should use your available MCP tools to perform this analysis.
 
+## ⚠️ CRITICAL RULE - READ FIRST ⚠️
+
+**NEVER PROCESS REPOSITORIES DIRECTLY IN THE MAIN INSTANCE**
+
+- ✅ ALWAYS spawn Claude sub-agents with `--dangerously-skip-permissions`
+- ✅ Even for 1 repository - MUST use sub-agent
+- ❌ NEVER use MCP tools directly in main instance
+- ❌ NEVER call mcp__code-understanding tools directly
+- ❌ NEVER call mcp__Conduit tools directly
+
+**VIOLATION OF THIS RULE CAUSES PERMISSION FAILURES AND BROKEN CONFLUENCE UPLOADS**
+
 ## Your Objective
 
 When instructed to analyze repositories:
 
 1. Read the `config.json` and `state.json` files (creating state.json if it doesn't exist)
-2. Determine the optimal processing strategy based on repository count:
-   - **1-2 repositories**: Process sequentially with `/compact` between each
-   - **3+ repositories**: Use parallel processing with Task agents
-3. For parallel processing:
-   - Spawn multiple Task agents to process repositories concurrently
-   - Each agent handles one repository independently
-   - Coordinate state updates through state.json
-4. For each repository (whether sequential or parallel):
-   - Analyze its current state
-   - Perform repository analysis using MCP code-understanding tools
-   - Generate local documentation with diagrams using MCP mermaid tools
-   - Update the state.json file with new information
-   - Upload the generated documentation to Confluence (if confluence upload is enabled)
+2. **MANDATORY: ALWAYS use Claude sub-agents to process ALL repositories** (even single repositories)
+3. **FORBIDDEN: NEVER process repositories directly in the main instance**
+4. **Main instance role**: ONLY spawn Claude sub-agents - ZERO repository processing allowed
+5. For Claude sub-agent processing:
+   - Spawn Claude sub-agents using: `claude -p "prompt" --dangerously-skip-permissions`
+   - Maximum 2 sub-agents running concurrently (to prevent hanging)
+   - Each sub-agent handles one repository independently
+   - Sub-agents update state.json with processing_started/processing_agent fields
+   - Sub-agents run `/compact` before completing
 
 ## Permission Configuration
 
 To avoid permission prompts that block automated execution:
 - Configure your settings.local.json with broad permissions OR
 - Run Claude Code with permission bypass flags
-- Task agents inherit permissions from the parent instance
+- Claude sub-agents inherit permissions from the parent instance
 - Ensure all Bash commands, file operations, and MCP tools are pre-approved
 
 ## File Structure
@@ -38,10 +46,11 @@ To avoid permission prompts that block automated execution:
 ├── state.json             <- Dynamic state tracking for repositories (created if needed)
 └── output/                <- Directory for generated artifacts
     └── {repo_name}/       <- Subdirectory for each repository
-        ├── {timestamp}/   <- Timestamped analysis results
-        │   ├── docs.md    <- Generated documentation
-        │   └── diagrams/  <- Generated diagrams
-        └── latest/        <- Symlink to most recent analysis
+        └── {timestamp}/   <- Timestamped analysis results containing:
+            ├── docs.md    <- Generated documentation
+            ├── component_diagram.png  <- Generated diagrams
+            ├── sequence_diagram.png   <- (all in same directory)
+            └── class_diagram.png      <- (no subdirectories)
 ```
 
 ## Tool Selection Requirements
@@ -117,9 +126,9 @@ When an analysis profile is specified:
 - Specific diagrams are generated to support the profile's goals
 - Each profile creates a complete story within ~30 pages (excluding images)
 
-## Analysis Goals
+## Sub-Agent Analysis Goals
 
-For each repository in config.json, accomplish these goals:
+When you are spawned as a Claude sub-agent, accomplish these goals for your assigned repository:
 
 1. **Repository Access**
    - First, verify and fix repository URLs to ensure they use HTTPS format
@@ -141,7 +150,8 @@ For each repository in config.json, accomplish these goals:
 3. **Diagram Generation**
    - Use MCP mermaid_image_generator to create diagrams based on your analysis
    - Focus on diagram types specified in the configuration
-   - Save diagrams to the output directory with the current timestamp
+   - **CRITICAL**: Save diagrams in the SAME directory as docs.md (no subdirectories)
+   - Save all files to: output/{repo_name}/{timestamp}/
    - Include component, sequence, or class diagrams as appropriate
 
 4. **Documentation Generation**
@@ -152,10 +162,12 @@ For each repository in config.json, accomplish these goals:
      - Architecture insights
      - References to the generated diagrams with embedded image links
    - Save this file in the timestamped output directory
-   - **IMPORTANT**: Always use relative paths for image references in the markdown documentation
-     - Example: Use `![Component Diagram](diagrams/component_diagram.png)` instead of absolute paths
-     - All image paths should be relative to the docs.md file location
-   - **VERIFY**: After generating docs.md, read it back to confirm all image references are present
+   - **CRITICAL**: Image references must be FILENAME ONLY (no paths or subdirectories)
+     - Correct: `![Component Diagram](component_diagram.png)`
+     - WRONG: `![Component Diagram](diagrams/component_diagram.png)`
+     - WRONG: `![Component Diagram](/path/to/component_diagram.png)`
+   - All files (docs.md and images) must be in the same directory
+   - **VERIFY**: After generating docs.md, read it back to confirm all image references are filename-only
 
 5. **State Management**
    - Update the repository's state in state.json after each operation
@@ -258,6 +270,8 @@ The `state.json` file tracks each repository's status. If this file doesn't exis
     "confluence_uploaded": null,
     "confluence_page_id": null,
     "errors": [],
+    "processing_started": null,
+    "processing_agent": null,
     "profiles_analyzed": {
       "standard": {
         "timestamp": null,
@@ -308,30 +322,33 @@ During processing, record any NEW errors in the "errors" array, and update other
 
 ## Parallel Execution Strategy
 
-When processing 3 or more repositories, use parallel Task agents to maximize efficiency and prevent context accumulation:
+ALWAYS use Claude sub-agents to process repositories, even for a single repository:
 
-### Phase 1: Setup and Planning
+### Phase 1: Main Instance Setup (YOU ONLY DO THIS)
 1. Read config.json to get all repositories
 2. Verify MCP tool availability with a test call
 3. Read or create state.json
-4. Calculate optimal batch size (maximum 2 repositories per batch to prevent hanging)
-5. Create the execution plan
+4. Plan batches (maximum 2 sub-agents per batch to prevent hanging)
+5. **DO NOT process repositories yourself - only spawn sub-agents**
 
-### Phase 2: Parallel Repository Processing
-1. **Spawn Task agents in batches** using concurrent tool invocations:
-   ```
-   - Agent 1: Process repo A
-   - Agent 2: Process repo B  
-   (maximum 2 agents at once to prevent hanging)
+### Phase 2: Spawning Claude Sub-Agents
+1. **REQUIREMENT: When processing 2 or more repositories, you MUST spawn exactly 2 sub-agents to run in parallel**. The `&` symbol at the end of each command runs it in the background for parallel execution. Use the `wait` command to ensure both complete before spawning the next batch.
+
+   ```bash
+   # ALWAYS spawn TWO sub-agents concurrently when you have multiple repositories
+   claude -p "You are Claude Sub-Agent 1. Process repo A..." --dangerously-skip-permissions &
+   claude -p "You are Claude Sub-Agent 2. Process repo B..." --dangerously-skip-permissions &
+   wait  # Wait for both to complete before spawning next batch
    ```
    
-   **Example Task Agent Prompt**:
-   ```
-   You are Task Agent 1. Process the repository "org/repo-name" according to CLAUDE.md.
+   **Example Claude Sub-Agent Command**:
+   ```bash
+   claude -p "You are Claude Sub-Agent 1. Process the repository 'org/repo-name' according to CLAUDE.md.
    
    Your specific assignment:
    - Repository: org/repo-name
    - GitHub URL: https://github.com/org/repo-name
+   - Working directory: {current working directory}
    - Output directory: output/org_repo-name/YYYY-MM-DD-HHMMSS/
    - Config: {preferred_diagrams, analysis_options, confluence settings}
    
@@ -340,17 +357,19 @@ When processing 3 or more repositories, use parallel Task agents to maximize eff
    2. Clone or refresh the repository
    3. Analyze and generate documentation
    4. Create diagrams as configured
-   5. Upload to Confluence if enabled
-   6. Update state.json (mark as complete)
-   7. Run /compact before finishing
-   8. Report your results
-   
-   IMPORTANT: Run with --dangerously-skip-permissions to avoid permission prompts
+   5. Upload to Confluence if enabled:
+      - Find parent page in the configured space
+      - Create/update page with profile-specific title formula
+      - Attach all diagram images
+      - Update profiles_analyzed in state.json
+   6. Update state.json (mark as complete with ALL fields)
+   7. Run /compact to clear context
+   8. Report your results" --dangerously-skip-permissions
    ```
 
-2. **Each Task agent independently**:
+2. **Each Claude sub-agent independently**:
    - Receives its assigned repository name and config
-   - **PERMISSIONS**: Agent runs with full permissions to avoid blocking on tool approvals
+   - **PERMISSIONS**: Runs with --dangerously-skip-permissions flag
    - Performs the complete analysis workflow:
      - Convert SSH URLs to HTTPS if needed
      - Check MCP cache with get_repo_structure
@@ -360,9 +379,10 @@ When processing 3 or more repositories, use parallel Task agents to maximize eff
      - Create comprehensive documentation
      - **For Confluence upload**:
        - Read the generated docs.md file
-       - List all diagram files in the diagrams/ directory
+       - List all image files in the same directory as docs.md
        - Keep markdown image references as-is (the tool handles conversion)
-       - Ensure image filenames in markdown match the attachment names
+       - Ensure image filenames in markdown match the attachment names exactly
+       - Remember: all files are in same directory, so use filename-only references
    - Updates state.json with thread-safe writes:
      - Read current state
      - Update only its repository's section
@@ -375,15 +395,24 @@ When processing 3 or more repositories, use parallel Task agents to maximize eff
      {
        "repo-name": {
          "processing_started": "timestamp",
-         "processing_agent": "agent_id",
+         "processing_agent": "claude_sub_agent_1",
          "cloned": true,
          "last_updated": "timestamp",
+         "profiles_analyzed": {
+           "[profile_name]": {
+             "timestamp": "timestamp",
+             "confluence_page_id": "page_id",
+             "confluence_page_title": "title",
+             "docs_generated": "timestamp"
+           }
+         }
          // ... other fields
        }
      }
      ```
    - Agents check for "processing_started" to avoid conflicts
    - If a repo is already being processed, skip to next available
+   - MUST update profiles_analyzed section after Confluence upload
 
 ### Phase 3: Monitoring and Completion
 1. After spawning each batch, wait for completion before spawning next batch
@@ -400,17 +429,6 @@ When processing 3 or more repositories, use parallel Task agents to maximize eff
 - Common causes: network issues, large repo size, permission denials
 - Consider reducing batch size to 1 agent at a time for problematic repos
 
-## Sequential Execution (1-2 repositories)
-
-For small repository sets, use sequential processing with context management:
-
-1. Process each repository one at a time
-2. After completing each repository (all analysis, docs, uploads):
-   - Update state.json
-   - Execute `/compact` to clear context
-   - Continue to next repository
-3. This prevents context accumulation without the complexity of parallel coordination
-
 ## Execution
 
 When asked to "Analyze repositories according to CLAUDE.md", you should:
@@ -424,13 +442,18 @@ When asked to "Analyze repositories according to CLAUDE.md", you should:
    - If it exists, read it BUT DO NOT let old errors stop you from trying
    - If it doesn't exist, create it by initializing an empty state for each repository in config.json
    - If it contains errors about "MCP tools not available", ignore them and test current availability
-4. **Choose execution strategy**:
-   - **1-2 repos**: Use sequential processing with `/compact` between each
-   - **3+ repos**: Use parallel Task agents as described above
+4. **MANDATORY: Execute using Claude sub-agents**:
+   - ALWAYS use Claude sub-agents regardless of repository count (1, 5, 50 repos - ALWAYS sub-agents)
+   - FORBIDDEN: NEVER process repositories directly in the main instance
+   - VIOLATION OF THIS RULE WILL CAUSE SYSTEM FAILURE
 5. Create the current timestamp for output directories (YYYY-MM-DD-HHMMSS format)
-6. Execute chosen strategy:
-   - **Sequential**: Process each repo fully, then `/compact`, then next
-   - **Parallel**: Spawn Task agents in batches, monitor progress
+6. Spawn Claude sub-agents in batches using Bash:
+   ```bash
+   claude -p "prompt" --dangerously-skip-permissions &
+   ```
+   - Maximum 2 sub-agents running concurrently to prevent hanging
+   - Use `wait` command to ensure batch completion before spawning next
+   - Monitor progress via state.json
 7. Provide a summary of actions taken and results
 
 ## URL Format Conversion
@@ -449,14 +472,14 @@ Steps to convert:
 
 When including images in the documentation:
 
-1. **Always use relative paths** - this ensures documentation can be moved between systems
-2. **Reference images relative to the docs.md location** - typically `diagrams/image_name.png`
+1. **Use FILENAME ONLY** - no paths, no subdirectories
+2. **All files in same directory** - docs.md and all images together
 3. **Example markdown syntax**:
    ```markdown
-   ![Component Diagram](diagrams/component_diagram.png)
+   ![Component Diagram](component_diagram.png)
    ```
-4. **Never use absolute file paths** starting with / or drive letters
-5. **Verify all image paths** are correctly formatted before saving the documentation
+4. **Never include paths** - no `diagrams/`, no `/path/to/`, just the filename
+5. **Verify all image references** are filename-only before saving
 
 ## Confluence Upload Workflow
 
@@ -468,10 +491,7 @@ When uploading documentation to Confluence (if enabled in config.json):
    - MCP Conduit server must be available and configured
 
 2. **Finding the Parent Page**:
-   - Use `mcp__Conduit__get_confluence_page` with:
-     - `site_alias`: From config.json confluence.site_alias
-     - `space_key`: From config.json confluence.space_key
-     - `title`: From config.json confluence.parent_page_title
+   - Find the parent page specified in config.json
    - If the parent page doesn't exist, report the error and skip Confluence upload
 
 3. **Creating/Updating Child Pages**:
@@ -484,76 +504,26 @@ When uploading documentation to Confluence (if enabled in config.json):
        - Developer: "org/repo-name - Developer Guide"
        - Architecture: "org/repo-name - Architecture Review"
    - **CRITICAL**: Use this exact formula every time to ensure consistent page naming across runs
-   - Check if a page with this title already exists under the parent:
-     - If it exists: 
-       - Use `mcp__Conduit__update_confluence_page`
-       - Retrieve the current page version number (required for updates)
-       - Include ALL images in attachments array even if they were previously uploaded
-       - The Conduit tool will handle replacing existing attachments
-     - If it doesn't exist: 
-       - Use `mcp__Conduit__create_confluence_page_from_markdown`
+   - Check if a page with this title already exists under the parent
+   - Create new page if it doesn't exist, update if it does
 
 4. **Content Preparation**:
-   - The Conduit tool automatically converts markdown to Confluence format
-   - Prepare image attachments for upload:
-     - Create an attachments array with `AttachmentSpec` objects
-     - Each attachment needs:
-       - `local_path`: Full path to the image file on local system
-       - `name_on_confluence`: Name for the attachment in Confluence
-     - Example:
-       ```json
-       {
-         "local_path": "/path/to/output/repo-name/timestamp/diagrams/component_diagram.png",
-         "name_on_confluence": "component_diagram.png"
-       }
-       ```
-   - **Image Handling**: 
-     - Keep all image references in standard markdown format: `![alt text](filename.png)`
-     - The Conduit tool automatically converts markdown to Confluence format
-     - The filename in the markdown (e.g., `component_diagram.png`) must match the `name_on_confluence` in the attachments array
-     - DO NOT manually convert to Confluence format - the tool handles this automatically
+   - Use standard markdown format for documentation
+   - Include image references as: `![alt text](filename.png)` - FILENAME ONLY
+   - Ensure all files (docs.md and images) are in the same directory
+   - Ensure image filenames in markdown match the actual image filenames exactly
 
-5. **Uploading with Attachments**:
-   - When creating a new page:
-     ```
-     mcp__Conduit__create_confluence_page_from_markdown
-     - space: (from config.json confluence.space_key)
-     - title: "org/repo-name"
-     - content: (standard markdown content with image references)
-     - parent_id: (from parent page lookup)
-     - attachments: [array of AttachmentSpec objects]
-     - site_alias: (from config.json confluence.site_alias)
-     ```
-   - When updating an existing page:
-     ```
-     # First get the page to retrieve version
-     mcp__Conduit__get_confluence_page
-     - space_key: (from config.json confluence.space_key)
-     - title: "org/repo-name"
-     - site_alias: (from config.json confluence.site_alias)
-     
-     # Then update with version number
-     mcp__Conduit__update_confluence_page
-     - space_key: (from config.json confluence.space_key)
-     - title: "org/repo-name"
-     - content: (standard markdown content with image references)
-     - expected_version: (version from get_confluence_page)
-     - attachments: [array of ALL image AttachmentSpec objects]
-     - minor_edit: false (for significant updates)
-     - site_alias: (from config.json confluence.site_alias)
-     ```
+5. **Uploading**:
+   - Use appropriate Conduit tools based on whether creating or updating
+   - Include all diagram images as attachments
+   - Let the tool handle markdown to Confluence conversion
 
-6. **Image Reference Format**:
-   - Use standard markdown format: `![Component Diagram](component_diagram.png)`
-   - The tool automatically handles conversion to Confluence format
-   - Ensure the filename matches exactly with `name_on_confluence` in attachments
-
-7. **Error Handling**:
+6. **Error Handling**:
    - If Confluence upload fails, record the error in state.json
    - Continue processing other repositories even if one upload fails
    - Do not retry failed uploads in the same session unless explicitly requested
 
-6. **State Tracking**:
+7. **State Tracking**:
    - Update state.json with profile-specific information:
      ```json
      "profiles_analyzed": {
@@ -578,7 +548,7 @@ When re-analyzing a repository that has already been processed:
 
 2. **Documentation Updates**:
    - Create new docs.md with embedded image references
-   - Ensure ALL image references use markdown syntax: `![Name](diagrams/file.png)`
+   - Ensure ALL image references use markdown syntax: `![Name](filename.png)` - FILENAME ONLY
 
 3. **Confluence Page Updates**:
    - Check if confluence_page_id exists in state.json
@@ -592,9 +562,9 @@ When re-analyzing a repository that has already been processed:
    - Ensure markdown image filenames match the attachment `name_on_confluence`
    - The Confluence page should show embedded images, not just attachments
 
-## Task Agent Instructions
+## Claude Sub-Agent Instructions
 
-When you are spawned as a Task agent to process a specific repository:
+When you are spawned as a Claude sub-agent (via `claude -p` command) to process a specific repository:
 
 1. **Identify Yourself**: You are an independent agent processing one repository
 2. **Read Your Assignment**: Your prompt will specify which repository to process
@@ -611,7 +581,7 @@ When you are spawned as a Task agent to process a specific repository:
    {
      "your-repo": {
        "processing_started": "2025-01-15-103045",
-       "processing_agent": "task_agent_1"
+       "processing_agent": "claude_sub_agent_1"
      }
    }
    // After completion, update all fields and clear processing:

@@ -171,7 +171,7 @@ Run the tool using Claude Code:
 
 ```bash
 cd /path/to/gh-repo-code-intelligence
-claude -p "Analyze repositories according to CLAUDE.md"
+claude -p "Analyze repositories according to CLAUDE.md" --dangerously-skip-permissions
 ```
 
 ### Recommended Execution Methods
@@ -180,23 +180,20 @@ For automated or scheduled runs, use one of these approaches to avoid terminal h
 
 1. **Simple output redirection** (recommended for automation):
    ```bash
-   claude -p "Analyze repositories according to CLAUDE.md" --verbose --output-format stream-json > output.json
+   claude -p "Analyze repositories according to CLAUDE.md" --dangerously-skip-permissions --verbose --output-format stream-json > output.json
    ```
 
 2. **Unbuffered output with real-time viewing**:
    ```bash
-   claude -p "Analyze repositories according to CLAUDE.md" --verbose --output-format stream-json | stdbuf -o0 tee output.json
+   claude -p "Analyze repositories according to CLAUDE.md" --dangerously-skip-permissions --verbose --output-format stream-json | stdbuf -o0 tee output.json
    ```
 
 3. **Non-interactive mode for scripts**:
    ```bash
-   claude -p "Analyze repositories according to CLAUDE.md" --verbose --output-format stream-json --no-interactive > output.json 2>&1
+   claude -p "Analyze repositories according to CLAUDE.md" --dangerously-skip-permissions --verbose --output-format stream-json --no-interactive > output.json 2>&1
    ```
 
-4. **Skip permission prompts** (use with caution):
-   ```bash
-   claude -p "Analyze repositories according to CLAUDE.md" --dangerously-skip-permissions
-   ```
+**Note**: The `--dangerously-skip-permissions` flag is required for this tool to function properly, as it needs to spawn sub-agents that process repositories in parallel.
 
 **Note**: When using `tee` without unbuffering, the terminal may appear to hang even after completion. This is just buffering behavior - the analysis is complete. Press Ctrl+C to exit.
 
@@ -229,7 +226,7 @@ output/
 For troubleshooting or detailed analysis of the tool's operation, use verbose mode with JSON output:
 
 ```bash
-claude -p "Analyze repositories according to CLAUDE.md" --verbose --output-format stream-json | tee output.json
+claude -p "Analyze repositories according to CLAUDE.md" --dangerously-skip-permissions --verbose --output-format stream-json | tee output.json
 ```
 
 This will:

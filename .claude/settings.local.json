@@ -29,13 +29,15 @@
       "mcp__Conduit__list_atlassian_sites",
       "mcp__Conduit__get_confluence_page",
       "mcp__Conduit__create_confluence_page_from_markdown",
-      "mcp__Conduit__update_confluence_page",
+      "mcp__Conduit__update_confluence_page_from_markdown",
       "WebFetch(domain:docs.anthropic.com)",
       "Bash(cat:*)",
       "Bash(cp:*)",
       "Bash(grep:*)",
       "Bash(echo:*)",
-      "Bash(pwd:*)"
+      "Bash(pwd:*)",
+      "Bash(rm:*)",
+      "Bash(diff:*)"
     ],
     "deny": []
   },
