@@ -18,13 +18,14 @@
       ]
     },
     "Conduit": {
-      "command": "npx",
-      "args": [
-        "conduit-mcp"
-      ],
-      "env": {
-        "CONDUIT_CONFIG_DIR": "/path/to/your/conduit/config"  // Required: directory containing config.yaml with Atlassian authentication
-      }
+      "command": "mcp-server-conduit",
+      "args": []
+      // Note: Conduit requires manual initialization before use:
+      // 1. Install: pipx install conduit-connect
+      // 2. Initialize: conduit --init
+      // 3. Configure: Edit ~/.config/conduit/config.yaml (or %APPDATA%\conduit\config.yaml on Windows)
+      // 4. Add your Atlassian site credentials to config.yaml
+      // See https://github.com/codingthefuturewithai/conduit for details
     }
   }
 }

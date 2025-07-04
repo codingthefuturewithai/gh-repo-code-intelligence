@@ -239,7 +239,9 @@ This will:
 
 ## MCP Tool Setup
 
-This project depends on three MCP tools. The easiest way to add them to Claude Code is using these commands:
+This project depends on three MCP tools. There are two ways to add them to Claude Code:
+
+### Method 1: Using claude mcp add-json commands (Recommended)
 
 ```bash
 # Add Mermaid Image Generator
@@ -248,9 +250,23 @@ claude mcp add-json -s user mermaid_image_generator '{"type":"stdio","command":"
 # Add Code Understanding (replace YOUR_GITHUB_TOKEN with your personal access token if analyzing private repos)
 claude mcp add-json -s user code-understanding '{"type":"stdio","command":"uvx","args":["code-understanding-mcp-server","--max-cached-repos","20"],"env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"YOUR_GITHUB_TOKEN"}}'
 
-# Add Conduit (requires prior installation - see Conduit repo for details)
-claude mcp add-json -s user Conduit '{"type":"stdio","command":"/opt/homebrew/bin/mcp-server-conduit"}'
+# Add Conduit (requires prior installation - see special note below)
+claude mcp add-json -s user Conduit '{"type":"stdio","command":"mcp-server-conduit","args":[]}'
 ```
+
+### Method 2: Using .mcp.json.template
+
+Alternatively, you can copy and modify the provided template:
+```bash
+cp .mcp.json.template ~/.claude/.mcp.json
+```
+Then edit the file to add your GitHub token and adjust paths as needed.
+
+**IMPORTANT - Conduit Setup**: The Conduit MCP server requires manual initialization regardless of installation method:
+1. Install: `pipx install conduit-connect`
+2. Initialize: `conduit --init`
+3. Configure: Edit `~/.config/conduit/config.yaml` (or `%APPDATA%\conduit\config.yaml` on Windows)
+4. Add your Atlassian credentials to the config.yaml file
 
 **Note**: You'll need a GitHub Personal Access Token if analyzing private repositories. Create one at https://github.com/settings/tokens
 
