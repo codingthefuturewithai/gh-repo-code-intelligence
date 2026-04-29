@@ -25,6 +25,16 @@ These four constraints override everything else in this file.
 
 4. **Always convert SSH GitHub URLs to HTTPS** before writing them to `config.json`. SSH URLs prompt for an SSH passphrase and break the unattended workflow. Convert `git@github.com:org/repo.git` → `https://github.com/org/repo.git` silently and tell the user you did.
 
+## Pattern: external-vendor token guidance
+
+When the user has to create a token at GitHub, Atlassian, or any other vendor's site, **don't pretend to know the current UI**. Vendor UIs change — sometimes monthly. Hardcoded click-through instructions rot. Instead, follow this three-part pattern every time:
+
+1. **Provide the canonical URL.** These tend to be stable for years (e.g. `https://github.com/settings/tokens`, `https://id.atlassian.com/manage-profile/security/api-tokens`). Lead with the URL.
+2. **Narrate the last-known click path** — clearly framed as "as of last known, the path was X → Y → Z" so the user understands this could be stale.
+3. **Explicitly invite the user to come back if the UI doesn't match.** When they do, *use WebFetch on the vendor's current docs* to figure out the real flow together rather than guessing.
+
+Also surface the gotchas that don't depend on UI: token-shown-only-once, SSO authorization for org-owned private repos, scope-less Atlassian tokens, etc. Those bite even when the user finds the right page.
+
 ## The path
 
 Seven phases. Always announce which phase you're entering so the user can pause. **Skip any phase whose work is already done** — diagnose state before instructing.
@@ -79,18 +89,31 @@ Public-repo-only setup (no token):
 claude mcp add-json -s user code-understanding '{"type":"stdio","command":"uvx","args":["code-understanding-mcp-server","--max-cached-repos","20"]}'
 ```
 
-If the user plans to analyze **private** repos, give them the token-injecting variant to run themselves. Do **not** ask for the token value. Use this exact handoff pattern:
+If the user plans to analyze **private** repos, give them the token-injecting variant to run themselves, following the external-vendor token guidance pattern. Do **not** ask for the token value. Use this exact handoff:
 
-> "code-understanding needs a GitHub Personal Access Token to clone private repositories. Public repos work without one — skip this if you only need public.
+> "code-understanding needs a GitHub Personal Access Token to clone private repositories. Public repos work without one — skip this entire step if you only need public.
 >
-> 1. Create a token at https://github.com/settings/tokens with the `repo` scope.
-> 2. Run this command yourself, replacing `YOUR_TOKEN` with the value:
+> **Where to create one (canonical URL, stable):** https://github.com/settings/tokens
+>
+> **Last-known click path** (GitHub may have rearranged this — if the page looks different, tell me and we'll figure out the current flow together; I can fetch GitHub's current docs):
+> 1. Sign in to github.com.
+> 2. Click your profile picture (top right) → **Settings**.
+> 3. Scroll the left sidebar to the bottom → **Developer settings**.
+> 4. **Personal access tokens** → **Tokens (classic)**. (Fine-grained tokens also work but are more complex; classic is fine to start with.)
+> 5. **Generate new token** → **Generate new token (classic)**.
+> 6. Name it (e.g. `gh-repo-code-intelligence`), pick an expiration, and check the **`repo`** scope.
+> 7. **Generate token** at the bottom of the page.
+> 8. **Copy the token immediately** — GitHub shows it exactly once.
+>
+> **Org-owned private repos with SSO:** If the repo lives under a GitHub organization that requires SSO, look for an **Authorize** or **Configure SSO** button next to your new token in the token list and click it to authorize the token for that org. Without this step, clones of org repos fail with cryptic 'not found' errors.
+>
+> When you have the token, **run this command yourself**, replacing `YOUR_TOKEN`:
 >
 > ```
 > claude mcp add-json -s user code-understanding '{"type":"stdio","command":"uvx","args":["code-understanding-mcp-server","--max-cached-repos","20"],"env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"YOUR_TOKEN"}}'
 > ```
 >
-> Tell me when it's done — I'll continue. Don't paste the token value here; I don't need to see it."
+> Tell me when it's done — I'll continue. Don't paste the token value here; I don't need to see it. **If anything in the GitHub UI didn't match what I described** (e.g. menu item gone, page restructured), come back and tell me — I'll fetch the current GitHub docs and we'll work it out together rather than guessing."
 
 #### Install mermaid_image_generator
 
@@ -107,9 +130,9 @@ pipx install conduit-connect
 conduit --init
 ```
 
-Then point the user at the config file and step away from the secret:
+Then point the user at the config file and step away from the secret. Use this handoff exactly (it follows the external-vendor token guidance pattern):
 
-> "Conduit needs your Atlassian credentials. Open `~/.config/conduit/config.yaml` (macOS/Linux) or `%APPDATA%\conduit\config.yaml` (Windows) and add your site under a chosen alias. The config looks roughly like:
+> "Conduit needs your Atlassian credentials. Open `~/.config/conduit/config.yaml` (macOS/Linux) or `%APPDATA%\conduit\config.yaml` (Windows) and add your site under a chosen alias. The shape is:
 >
 > ```yaml
 > sites:
@@ -119,7 +142,26 @@ Then point the user at the config file and step away from the secret:
 >     api_token: YOUR_ATLASSIAN_API_TOKEN
 > ```
 >
-> Get an Atlassian API token from https://id.atlassian.com/manage-profile/security/api-tokens. Pick a short alias — you'll need to use that exact alias as `confluence.site_alias` in `config.json` later. Tell me what alias you used (the alias is fine to share; the token is not). Once saved, I'll register Conduit with Claude Code."
+> What goes in each field:
+> - **`YOUR_ALIAS`** — a short name you choose (e.g. `acme`, `work`, `ctf`). You'll use this exact alias as `confluence.site_alias` in `config.json` later, so pick something short and memorable.
+> - **`url`** — your full Atlassian Cloud URL (e.g. `https://acme.atlassian.net`).
+> - **`email`** — the email address you use to sign in to Atlassian.
+> - **`api_token`** — see below.
+>
+> **Where to create the API token (canonical URL, stable):** https://id.atlassian.com/manage-profile/security/api-tokens
+>
+> **Last-known click path** (Atlassian rearranges this page periodically — if it doesn't match, tell me and we'll figure out the current flow):
+> 1. Sign in at https://id.atlassian.com.
+> 2. Find **Security** in the navigation (sidebar or top — depends on the layout currently in use).
+> 3. **API tokens** section → **Create API token**.
+> 4. Give it a label (e.g. `gh-repo-code-intelligence`) → **Create**.
+> 5. **Copy the token immediately** — Atlassian shows it exactly once. If you lose it, you'll have to revoke and create a new one.
+>
+> Things worth knowing about Atlassian tokens (don't depend on the UI, so they don't go stale):
+> - The token has **no scopes** — one token works for Confluence, Jira, and everything else on your account. (This trips up people coming from GitHub.)
+> - The token inherits your user account's permissions exactly. If you can't see a Confluence space in the browser, the token can't either.
+>
+> Tell me what alias you picked (the alias is fine to share; the token is not). Once saved, I'll register Conduit with Claude Code. **If the Atlassian UI didn't match what I described**, come back and we'll fetch the current docs together."
 
 After confirmation:
 
