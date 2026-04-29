@@ -186,13 +186,25 @@ After confirmation:
 claude mcp add-json -s user Conduit '{"type":"stdio","command":"mcp-server-conduit","args":[]}'
 ```
 
-### Phase 3 — Verify MCP registration
+### Phase 3 — Verify MCP servers are registered AND enabled
 
-MCP servers only load at Claude Code session start. Tell the user:
+Two separate pieces of state get conflated as "connected" — both must be checked:
 
-> "Quick — exit this Claude Code session (Ctrl+D or `exit`), then reopen with `claude` from this same directory. Once you're back, run `claude mcp list` and paste the output. I need to see all the servers we just registered show up there before we go further."
+- **`claude mcp list`** is a reachability check. ✓ Connected there means "the server can be spawned and responds." It does **not** tell you whether the server is enabled in this user's session config.
+- **`/mcp` inside a Claude Code session** shows the per-user **enable/disable** flag from `~/.claude.json`. New servers added via `claude mcp add-json` are registered but **not automatically enabled** — the user must visit `/mcp` once and enable each new server. Sub-agents spawned via `claude -p` inherit this enabled state from `~/.claude.json` at startup.
 
-When they return, confirm the expected servers are listed. If anything is missing, look at the error output or ask them to re-run the install command for that server.
+A server can show `✓ Connected` in `claude mcp list` while still showing `○ disabled` in `/mcp`. In that state the sub-agent that runs the analysis has no access to the server's tools and the run silently fails. **Trusting `claude mcp list` alone is the most common way this skill leads to a broken first run.**
+
+MCP servers only load at session start, so the user must restart and verify in **both** places. Tell them:
+
+> "Three things, in order:
+> 1. Exit this Claude Code session (Ctrl+D or `exit`), then reopen with `claude` from this same directory.
+> 2. Run `claude mcp list` — confirm each server we registered shows `✓ Connected`.
+> 3. **Important — this catches almost everyone the first time:** open `/mcp` inside the session. For each server we registered (`code-understanding`, `mermaid_image_generator`, and `Conduit` if applicable), check whether it shows `✓ connected` or `○ disabled`. If any show `○ disabled`, arrow-key to it and press Enter to enable. Then exit the session and reopen one more time so the enabled state is picked up by future sub-agent spawns.
+>
+> Once all the servers we registered show `✓ connected` in **`/mcp`** (not just in `claude mcp list`), tell me and we'll move on."
+
+Do **not** proceed past this phase until the user confirms via `/mcp` (not `claude mcp list`) that every server we installed is in the `connected`, not `disabled`, state.
 
 ### Phase 4 — Build config.json
 
