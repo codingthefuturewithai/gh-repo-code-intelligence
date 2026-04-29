@@ -23,7 +23,7 @@ When instructed to analyze repositories:
 3. **FORBIDDEN: NEVER process repositories directly in the main instance**
 4. **Main instance role**: ONLY spawn Claude sub-agents - ZERO repository processing allowed
 5. For Claude sub-agent processing:
-   - Spawn Claude sub-agents using: `claude -p "prompt" --dangerously-skip-permissions`
+   - Spawn Claude sub-agents using: `claude -p "prompt" --model claude-sonnet-4-6 --fallback-model claude-haiku-4-5-20251001 --dangerously-skip-permissions`
    - Maximum 2 sub-agents running concurrently (to prevent hanging)
    - Each sub-agent handles one repository independently
    - Sub-agents update state.json with processing_started/processing_agent fields
@@ -347,6 +347,15 @@ ALWAYS use Claude sub-agents to process repositories, even for a single reposito
 5. **DO NOT process repositories yourself - only spawn sub-agents**
 
 ### Phase 2: Spawning Claude Sub-Agents
+
+**SUB-AGENT MODEL SELECTION (REQUIRED)**:
+All sub-agents MUST be spawned on Claude Sonnet 4.6, with Haiku 4.5 as the overload fallback. The main agent runs on whatever the user has configured (typically Opus), but sub-agents do not need that level of capability for this workflow — Sonnet 4.6 handles the multi-step MCP orchestration and the 15–30 page audience-tailored documentation reliably while running significantly faster and at materially lower cost than Opus. The fallback flag prevents a Sonnet overload from killing a batch mid-run.
+
+Required flags on every sub-agent spawn:
+- `--model claude-sonnet-4-6` — primary model
+- `--fallback-model claude-haiku-4-5-20251001` — used only when Sonnet is overloaded
+- `--dangerously-skip-permissions` — required for unattended MCP tool use
+
 1. **REQUIREMENT: When processing 2 or more repositories, you MUST spawn exactly 2 sub-agents to run in parallel**. The `&` symbol at the end of each command runs it in the background for parallel execution. Use the `wait` command to ensure both complete before spawning the next batch.
 
    **CRITICAL TIMEOUT HANDLING**:
@@ -357,12 +366,16 @@ ALWAYS use Claude sub-agents to process repositories, even for a single reposito
 
    ```bash
    # ALWAYS spawn TWO sub-agents concurrently with 5-minute timeout
-   claude -p "You are Claude Sub-Agent 1. Process repo A..." --dangerously-skip-permissions &
-   claude -p "You are Claude Sub-Agent 2. Process repo B..." --dangerously-skip-permissions &
+   claude -p "You are Claude Sub-Agent 1. Process repo A..." \
+     --model claude-sonnet-4-6 --fallback-model claude-haiku-4-5-20251001 \
+     --dangerously-skip-permissions &
+   claude -p "You are Claude Sub-Agent 2. Process repo B..." \
+     --model claude-sonnet-4-6 --fallback-model claude-haiku-4-5-20251001 \
+     --dangerously-skip-permissions &
    wait  # Wait for both to complete before spawning next batch
    
-   # If either times out, check exit codes and retry with 10-minute timeout:
-   # claude -p "You are Claude Sub-Agent 1. Process repo A..." --dangerously-skip-permissions &
+   # If either times out, check exit codes and retry with 10-minute timeout
+   # (same --model and --fallback-model flags apply on retry)
    ```
    
    **Example Claude Sub-Agent Command**:
@@ -388,7 +401,9 @@ ALWAYS use Claude sub-agents to process repositories, even for a single reposito
       - Update profiles_analyzed in state.json
    6. Update state.json (mark as complete with ALL fields)
    7. Run /compact to clear context
-   8. Report your results" --dangerously-skip-permissions
+   8. Report your results" \
+   --model claude-sonnet-4-6 --fallback-model claude-haiku-4-5-20251001 \
+   --dangerously-skip-permissions
    ```
 
 2. **Each Claude sub-agent independently**:
@@ -443,8 +458,8 @@ ALWAYS use Claude sub-agents to process repositories, even for a single reposito
 2. Monitor exit codes from sub-agent commands:
    ```bash
    # Spawn sub-agents and capture their PIDs
-   claude -p "..." --dangerously-skip-permissions & PID1=$!
-   claude -p "..." --dangerously-skip-permissions & PID2=$!
+   claude -p "..." --model claude-sonnet-4-6 --fallback-model claude-haiku-4-5-20251001 --dangerously-skip-permissions & PID1=$!
+   claude -p "..." --model claude-sonnet-4-6 --fallback-model claude-haiku-4-5-20251001 --dangerously-skip-permissions & PID2=$!
    
    # Wait and check exit codes
    wait $PID1; EXIT1=$?
@@ -495,8 +510,11 @@ When asked to "Analyze repositories according to CLAUDE.md", you should:
 5. Create the current timestamp for output directories (YYYY-MM-DD-HHMMSS format)
 6. Spawn Claude sub-agents in batches using Bash:
    ```bash
-   claude -p "prompt" --dangerously-skip-permissions &
+   claude -p "prompt" \
+     --model claude-sonnet-4-6 --fallback-model claude-haiku-4-5-20251001 \
+     --dangerously-skip-permissions &
    ```
+   - Always pin sub-agents to Sonnet 4.6 with Haiku 4.5 fallback (see Phase 2 for rationale)
    - Maximum 2 sub-agents running concurrently to prevent hanging
    - Use `wait` command to ensure batch completion before spawning next
    - Monitor progress via state.json
