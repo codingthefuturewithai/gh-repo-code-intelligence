@@ -45,3 +45,10 @@ config.json
 
 # Ignore backup files
 backups/
+*.backup
+
+# Skill development workspaces (eval iteration outputs, grading, transcripts)
+.claude/skills/*-workspace/
+
+# Top-level analysis trace artifact from `claude -p ... > output.json`
+/output.json

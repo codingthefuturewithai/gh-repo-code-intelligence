@@ -1,0 +1,26 @@
+{
+  "skill_name": "onboard-new-user",
+  "evals": [
+    {
+      "id": 0,
+      "name": "full-first-timer",
+      "prompt": "I just cloned this repo and have no idea what I'm doing. Help me get set up so I can analyze a GitHub repo. I want to point it at https://github.com/tiangolo/fastapi and produce some kind of useful documentation for new developers joining a team that uses FastAPI. I have not configured any MCP servers yet. I do not want Confluence — local files are fine.",
+      "expected_output": "Walks the user through prerequisites, MCP install for code-understanding + mermaid_image_generator (skipping Conduit), permissions, builds a config.json with developer_onboarding profile, confluence disabled, https URL, and presents the analysis run command. Never asks for any secret. Offers to run it but does not auto-execute.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "partial-setup-confluence-private",
+      "prompt": "I've got Claude Code working and I already installed the code-understanding and mermaid_image_generator MCP servers in a previous session. I want to point the tool at our internal repo at git@github.com:acme-co/payments-service.git (private) and publish the result to our company Confluence at acme.atlassian.net, space ENG, under the parent page 'Service Documentation'. Audience is architects doing a design review. Walk me through what I still need to do.",
+      "expected_output": "Detects what's already done, skips re-installing existing MCP servers, drives Conduit-only install path, instructs the user (does not ask) on how to inject GitHub PAT and Atlassian token, converts SSH URL to HTTPS, builds config.json with architecture_review profile + Confluence enabled + correct page_suffix, verifies parent page exists, presents run command.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "outcome-driven-confluence",
+      "prompt": "I want this tool to publish onboarding docs for our microservices to our internal Confluence at acme.atlassian.net, space MICRO, parent page 'Microservice Catalog'. We have about 8 services to start with and the audience is new hires. What do I need to do, and what's the command to run when I'm ready?",
+      "expected_output": "Walks the user through full setup including Conduit, builds a config.json (likely starting with one repo as a first run, or notes that multiple can be added), uses developer_onboarding profile with appropriate page_suffix, instructs on Atlassian token injection without asking for the value, presents the run command, mentions parent page must exist.",
+      "files": []
+    }
+  ]
+}
