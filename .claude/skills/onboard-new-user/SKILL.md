@@ -69,17 +69,34 @@ Three MCP servers may be involved. Conduit is only needed if the user wants to p
 | `mermaid_image_generator` | always | generate component/sequence/class PNGs |
 | `Conduit` | only with Confluence | find/create/update Confluence pages |
 
-#### Detect what is already installed
+#### Detect what is already usable in this session
 
-Before installing anything, inspect existing state:
+The reliable source of truth is **your own session's tool availability**, not what's registered. You (the assistant running this skill) already see all MCP tools as `mcp__<server>__<tool>` entries in your tool list. Check whether tools with each of these prefixes are available to you:
+
+- `mcp__code-understanding__*` — required
+- `mcp__mermaid_image_generator__*` — required
+- `mcp__Conduit__*` — required only if the user wants Confluence publishing
+
+If a prefix is missing from your available tools, that server is not usable in this session, regardless of what's registered.
+
+**Why this matters — `claude mcp list` alone isn't enough:** a server can be registered but disabled (via `/mcp` → Disable). In that state `claude mcp list` happily reports it as Connected while your session cannot actually call its tools. Trusting the registration listing in that case would make the skill falsely declare "you're already set up" when the user can't use anything.
+
+**Secondary cross-reference** (helpful for disambiguation, not authoritative):
 
 ```bash
 claude mcp list
 cat .mcp.json 2>/dev/null
-ls ~/.claude/.mcp.json 2>/dev/null
 ```
 
-Tell the user which of the three are present and which are missing. Only install what's missing. Do not re-run `claude mcp add-json` for servers that are already registered.
+Combine the two signals to bucket each required server:
+
+| Tools available to you in session? | Shows in `claude mcp list`? | Diagnosis | What to do |
+|---|---|---|---|
+| Yes | Yes | Working | Skip install — already usable |
+| No | Yes | Registered but disabled | Tell the user: `/mcp` → pick the server → Enable. Then they restart the session. Do NOT re-install. |
+| No | No | Not installed | Walk through the install commands below |
+
+Tell the user which of the three required servers fall into which bucket and only run install commands for the entirely-missing ones.
 
 #### Install code-understanding
 
@@ -110,7 +127,7 @@ If the user plans to analyze **private** repos, give them the token-injecting va
 > When you have the token, **run this command yourself**, replacing `YOUR_TOKEN`:
 >
 > ```
-> claude mcp add-json -s user code-understanding '{"type":"stdio","command":"uvx","args":["code-understanding-mcp-server","--max-cached-repos","20"],"env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"YOUR_TOKEN"}}'
+> claude mcp add-json -s user code-understanding '{"type":"stdio","command":"uvx","args":["code-understanding-mcp-server","--max-cached-repos","20"],"env":{"GITHUB_TOKEN":"YOUR_TOKEN"}}'
 > ```
 >
 > Tell me when it's done — I'll continue. Don't paste the token value here; I don't need to see it. **If anything in the GitHub UI didn't match what I described** (e.g. menu item gone, page restructured), come back and tell me — I'll fetch the current GitHub docs and we'll work it out together rather than guessing."
