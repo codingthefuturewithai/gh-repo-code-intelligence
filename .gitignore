@@ -47,8 +47,9 @@ config.json
 backups/
 *.backup
 
-# Skill development workspaces (eval iteration outputs, grading, transcripts)
+# Skill development artifacts — local-only, not for public repo
 .claude/skills/*-workspace/
+.claude/skills/*/evals/
 
 # Top-level analysis trace artifact from `claude -p ... > output.json`
 /output.json
